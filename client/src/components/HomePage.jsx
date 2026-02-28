@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useWallet } from "../hooks/useWallet";
-import { requestAdvance, getRemainingSalary, getEmployeeWithWA, CONTRACTS } from "../services/sorobanService";
+import { requestAdvance, getRemainingSalary,  CONTRACTS } from "../services/sorobanService";
 import { sendLumens } from "../services/apiService";
 import PayCycleProgress from "./PayCycleProgress";
 import WithdrawForm from "./WithdrawForm";
@@ -390,7 +390,7 @@ const HomePage = () => {
                   </div>
                   <p className="text-gray-600 text-sm mt-2">
 
-                    of {selectedToken?.symbol || "XLM"} {monthlySalary.toLocaleString()} monthly salary
+                    of {selectedToken?.symbol || "XLM"} {(monthlySalary ?? 0).toLocaleString()} monthly salary
 
                   </p>
                 </div>

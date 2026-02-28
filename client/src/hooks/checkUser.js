@@ -1,4 +1,4 @@
-import { registerEmployee, getEmployeeWithWA } from "../services/sorobanService.js";
+import { registerEmployee } from "../services/sorobanService.js"; //getEmployeeWithWA,
 import { useCallback } from "react";
 import { useEmployeeStore } from "../store/empStore.js";
 
