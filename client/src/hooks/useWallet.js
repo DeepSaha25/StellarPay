@@ -140,9 +140,8 @@ export function useWallet() {
 
         try {
           const { network } = await freighterApi.getNetwork();
-          console.log("Connected to network:", network);
         } catch (e) {
-          console.log("Could not get network info");
+          // Silent fallback if network cannot be fetched
         }
 
         return address;

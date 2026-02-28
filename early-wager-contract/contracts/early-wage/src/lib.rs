@@ -145,6 +145,8 @@ impl EarlyWageContract {
         }
 
         let client = token::Client::new(&e, &token);
+        // vulnerability or security fix issue :- Check user balance before cross-contract deposit
+        if client.balance(&from) < amount { panic!("Insufficient balance"); }
         client.transfer(&from, &e.current_contract_address(), &amount);
     }
 

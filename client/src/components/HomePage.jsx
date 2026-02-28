@@ -1,12 +1,16 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useWallet } from "../hooks/useWallet";
-import { requestAdvance, getRemainingSalary, CONTRACTS } from "../services/sorobanService";
+import { requestAdvance, getRemainingSalary, getEmployeeWithWA, CONTRACTS } from "../services/sorobanService";
 import { sendLumens } from "../services/apiService";
 import PayCycleProgress from "./PayCycleProgress";
 import WithdrawForm from "./WithdrawForm";
 import TransactionHistory from "./TransactionHistory";
 import SendMoneyModal from "./SendMoneyModal";
 import WaitlistModal from "./WaitlistModal";
+import { useEmployeeStore } from "../store/empStore";
+import RegistrationCard from "./RegistrationCard";
+import { useCheckUser } from "../hooks/checkUser";
+
 
 const HomePage = () => {
   const {
@@ -27,15 +31,48 @@ const HomePage = () => {
     loadingBalances,
   } = useWallet();
 
+
+  const employeeId = useEmployeeStore((state) => state.empId);
+  const monthlySalary = useEmployeeStore((state) => state.salary);
+  const { checkUser } = useCheckUser();
+
   const [lastWithdrawalDate, setLastWithdrawalDate] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [availableBalance, setAvailableBalance] = useState(0);
-  const [monthlySalary] = useState(5000);
-  const [employeeId] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [showSendModal, setShowSendModal] = useState(false);
   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+  const [showRegisterModal, setShowRegisterModal] = useState(false); //to check if a user is registered or not 
+
+
+  const fetchEmployeeData = useCallback(async () => {
+    // this function uses hooks to check whether a user is registered or not;
+    if (!walletAddress) return;
+
+    try {
+      setIsLoading(true);
+      const { isRegistered, empData } = await checkUser(walletAddress);
+
+      if (!isRegistered) {
+        setShowRegisterModal(true);
+        return;
+      }
+
+      // If registered, hide the modal forcefully and load scaled salary
+      setShowRegisterModal(false);
+
+      const scaledSalary = empData?.rem_salary
+        ? empData.rem_salary / 10000000
+        : (empData?.salary || 0);
+      setAvailableBalance(scaledSalary);
+
+    } catch (error) {
+      console.error("Error fetching employee data in HomePage:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [checkUser, walletAddress]);
 
   useEffect(() => {
     if (walletAddress) {
@@ -43,18 +80,6 @@ const HomePage = () => {
     }
   }, [walletAddress]);
 
-  const fetchEmployeeData = async () => {
-    try {
-      setIsLoading(true);
-      const remaining = await getRemainingSalary(walletAddress, employeeId);
-      setAvailableBalance(remaining / 10000000);
-    } catch (error) {
-      console.error("Error fetching employee data:", error);
-      setAvailableBalance(3500);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const showNotification = (message, type = "success") => {
     setNotification({ message, type });
@@ -144,11 +169,10 @@ const HomePage = () => {
       {/* Notification */}
       {notification && (
         <div
-          className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-xl border transition-all duration-500 animate-slide-in ${
-            notification.type === "error"
-              ? "bg-red-500/10 border-red-500/30 text-red-300"
-              : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-          }`}
+          className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-xl border transition-all duration-500 animate-slide-in ${notification.type === "error"
+            ? "bg-red-500/10 border-red-500/30 text-red-300"
+            : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+            }`}
         >
           <div className="flex items-center gap-3">
             <span className="text-xl">{notification.type === "error" ? "⚠️" : "✓"}</span>
@@ -163,7 +187,7 @@ const HomePage = () => {
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-white flex items-center justify-center">
               <svg className="w-5 h-5 text-[#0a0a0a]" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z"/>
+                <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
               </svg>
             </div>
             <span className="text-xl font-semibold text-white">StellarPay</span>
@@ -365,7 +389,9 @@ const HomePage = () => {
                     </span>
                   </div>
                   <p className="text-gray-600 text-sm mt-2">
+
                     of {selectedToken?.symbol || "XLM"} {monthlySalary.toLocaleString()} monthly salary
+
                   </p>
                 </div>
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
@@ -378,12 +404,12 @@ const HomePage = () => {
               <div className="mb-8">
                 <div className="flex justify-between text-sm text-gray-500 mb-2">
                   <span>Withdrawn</span>
-                  <span>{((1 - availableBalance / monthlySalary) * 100).toFixed(1)}%</span>
+                  <span>{((1 - availableBalance / Math.max(monthlySalary || 1, 1)) * 100).toFixed(1)}%</span>
                 </div>
                 <div className="h-2 bg-white/5 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-pink-400 to-purple-400 rounded-full transition-all duration-500"
-                    style={{ width: `${((monthlySalary - availableBalance) / monthlySalary) * 100}%` }}
+                    style={{ width: `${((Math.max(monthlySalary || 1, 1) - availableBalance) / Math.max(monthlySalary || 1, 1)) * 100}%` }}
                   />
                 </div>
               </div>
@@ -438,6 +464,16 @@ const HomePage = () => {
         <WaitlistModal
           onClose={() => setShowWaitlistModal(false)}
           onSuccess={handleWaitlistSuccess}
+        />
+      )}
+
+      {/* Registration Modal */}
+      {showRegisterModal && (
+        <RegistrationCard
+          onSuccess={() => {
+            setShowRegisterModal(false);
+            fetchEmployeeData();
+          }}
         />
       )}
 

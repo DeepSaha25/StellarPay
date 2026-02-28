@@ -3,16 +3,21 @@ import {
   BASE_FEE,
   Contract,
   nativeToScVal,
+  scValToNative,
   Networks,
   rpc,
   TransactionBuilder,
   xdr,
 } from "@stellar/stellar-sdk";
 
-// Contract addresses from env — never hardcode
-const CONTRACT_ADDRESS_TOKEN = import.meta.env.VITE_CONTRACT_TOKEN;
-const CONTRACT_ADDRESS_WAGE = import.meta.env.VITE_CONTRACT_WAGE;
-const RPC_URL = import.meta.env.VITE_RPC_URL || "https://soroban-testnet.stellar.org";
+import { signTransaction } from "@stellar/freighter-api";
+
+// Contract addresses - Update these with your deployed contract addresses
+const CONTRACT_ADDRESS_TOKEN = "CDHRNIGP6FT4NVRRGIDSAAOKUQMQYAS7LX6BWLX65SEAWJAGTF6YVZ7N";// old one CDB5EWYMHLVBUCF34JKI6V53DLV6IKZPABNTPGXRR7L5XUVDBKE2ZSA3
+
+const CONTRACT_ADDRESS_WAGE = "CDCLWMLTRGRKLVIGMZTBIRRXF2KEH5UAQBSMCL3RDGTSZRV7PDVY2O5C";//CAHEHF7DFQKQBBG6SRQF6U3P6WWDIIP6UAZXEPZAXMXYYYLIS7L7MJTN old contract address 
+
+const RPC_URL = "https://soroban-testnet.stellar.org";
 
 if (!CONTRACT_ADDRESS_TOKEN || !CONTRACT_ADDRESS_WAGE) {
   console.warn("⚠️ Contract addresses not set in .env — soroban calls will fail.");
@@ -95,12 +100,23 @@ async function signWithFreighter(preparedTx) {
   if (!window.freighterApi) throw new Error("Freighter wallet not found");
 
   const txXdr = preparedTx.toXDR();
-  const signedTxXdr = await window.freighterApi.signTransaction(txXdr, {
+  const signedResponse = await signTransaction(txXdr, {
     network: "TESTNET",
     networkPassphrase: Networks.TESTNET,
   });
 
-  return TransactionBuilder.fromXDR(signedTxXdr, Networks.TESTNET);
+  if (!signedResponse) {
+    throw new Error("Transaction signature was rejected or failed.");
+  }
+
+  // The NPM package might return an object { signedTxXdr: "..." } or a raw string
+  const finalXdr = typeof signedResponse === 'object' ? signedResponse.signedTxXdr || signedResponse.txXdr : signedResponse;
+
+  if (!finalXdr || typeof finalXdr !== 'string') {
+    throw new Error("Invalid response format from Freighter SDK: Missing XDR string.");
+  }
+
+  return TransactionBuilder.fromXDR(finalXdr, Networks.TESTNET);
 }
 
 async function submitTransaction(signedTx) {
@@ -201,6 +217,12 @@ export async function registerEmployee(publicKey, walletAddress, salary, salaryT
 }
 
 export async function depositToVault(publicKey, amount, tokenAddress = CONTRACT_ADDRESS_TOKEN) {
+  // Pre-flight check: Ensure the depositor has enough token balance
+  const balance = await getTokenBalance(publicKey, tokenAddress);
+  if (balance < amount) {
+    throw new Error(`Insufficient token balance! You only have ${balance} tokens.`);
+  }
+
   const args = [
     addressToScVal(publicKey),
     numberToI128(amount),
@@ -212,6 +234,15 @@ export async function depositToVault(publicKey, amount, tokenAddress = CONTRACT_
 }
 
 export async function requestAdvance(publicKey, empId, amount, tokenAddress = CONTRACT_ADDRESS_TOKEN) {
+  // Pre-flight check: Ensure the contract vault has enough balance to pay out
+  const vaultBalance = await getVaultBalance(publicKey, tokenAddress);
+  const fee = amount * 0.0125;
+  const netAmount = amount - fee;
+
+  if (vaultBalance < netAmount) {
+    throw new Error(`Contract has insufficient funds to pay this advance right now.`);
+  }
+
   const args = [
     numberToU128(empId),
     numberToI128(amount),
