@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { addToWaitlist, checkEmailExists } from '../libs/supabase';
+import { validateEmail } from '../utils/validation';
 
 const WaitlistModal = ({ onClose, onSuccess }) => {
   const [email, setEmail] = useState('');
@@ -11,22 +12,14 @@ const WaitlistModal = ({ onClose, onSuccess }) => {
     if (error) setError('');
   };
 
-  const validateEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
-    if (!email.trim()) {
-      setError('Please enter your email');
-      return;
-    }
-
-    if (!validateEmail(email)) {
-      setError('Please enter a valid email address');
+    // Validate email with comprehensive validation
+    const validation = validateEmail(email);
+    if (!validation.isValid) {
+      setError(validation.error);
       return;
     }
 
